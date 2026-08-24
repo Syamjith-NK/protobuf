@@ -161,6 +161,7 @@ cc_test(
     deps = [
         ":decode_test_upb_minitable_proto",
         ":decode_test_upb_proto",
+        ":reader",
         ":wire",
         "//upb/base",
         "//upb/mem",
