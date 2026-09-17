@@ -95,6 +95,7 @@ ALL_RUST_SRCS = PROTOBUF_SHARED + [
     "cpp_kernel/message.rs",
     "cpp_kernel/mod.rs",
     "cpp_kernel/raw.rs",
+    "cpp_kernel/reflection.rs",
     "cpp_kernel/repeated.rs",
     "cpp_kernel/string.rs",
     "gtest_matchers.rs",
@@ -198,6 +199,7 @@ rust_library(
         "cpp_kernel/message.rs",
         "cpp_kernel/mod.rs",
         "cpp_kernel/raw.rs",
+        "cpp_kernel/reflection.rs",
         "cpp_kernel/repeated.rs",
         "cpp_kernel/string.rs",
     ],
@@ -289,6 +291,25 @@ cc_library(
     ],
 )
 
+# The part of the C++ FFI implementation that needs the full C++ runtime.
+cc_library(
+    name = "cpp_api_reflection",
+    srcs = [
+        "cpp_kernel/reflection.cc",
+    ],
+    visibility = [
+        "//rust:__subpackages__",
+        "//src/google/protobuf:__subpackages__",
+    ],
+    deps = [
+        ":cpp_api",
+        "//src/google/protobuf",
+        "//src/google/protobuf:protobuf_lite",
+        "@abseil-cpp//absl/log:absl_check",
+    ],
+    alwayslink = 1,
+)
+
 rust_library(
     name = "rust_alloc_for_cpp_api",
     srcs = ["cpp_kernel/rust_alloc_for_cpp_api.rs"],
@@ -324,6 +345,7 @@ rust_library(
     edition = "2024",
     visibility = [":protobuf_internal"],
     deps = [
+        ":cpp_api_reflection",
         ":protobuf_cpp",
         "@crate_index//:googletest",
     ],
