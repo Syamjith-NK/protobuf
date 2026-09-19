@@ -5,7 +5,7 @@
 // license that can be found in the LICENSE file or at
 // https://developers.google.com/open-source/licenses/bsd
 
-#include "binary_json_conformance_suite.h"
+#include "conformance/binary_json_conformance_suite.h"
 
 #include <cassert>
 #include <cctype>
@@ -29,9 +29,10 @@
 #include "json/config.h"
 #include "json/reader.h"
 #include "json/value.h"
-#include "binary_wireformat.h"
+#include "conformance/binary_test_util.h"
+#include "conformance/binary_wireformat.h"
 #include "conformance/conformance.pb.h"
-#include "conformance_test.h"
+#include "conformance/conformance_test.h"
 #include "conformance/test_protos/test_messages_edition2023.pb.h"
 #include "conformance/test_protos/test_messages_edition_unstable.pb.h"
 #include "editions/golden/test_messages_proto2_editions.pb.h"
@@ -670,19 +671,6 @@ void BinaryAndJsonConformanceSuiteImpl<MessageType>::ExpectParseFailureForProto(
   ExpectParseFailureForProtoWithProtoVersion(proto, test_name, level);
 }
 
-// Expect that this protobuf will cause a parse error, even if it is followed
-// by valid protobuf data.  We can try running this twice: once with this
-// data verbatim and once with this data followed by some valid data.
-//
-// TODO: implement the second of these.
-template <typename MessageType>
-void BinaryAndJsonConformanceSuiteImpl<
-    MessageType>::ExpectHardParseFailureForProto(const std::string& proto,
-                                                 const std::string& test_name,
-                                                 ConformanceLevel level) {
-  return ExpectParseFailureForProto(proto, test_name, level);
-}
-
 template <typename MessageType>
 void BinaryAndJsonConformanceSuiteImpl<MessageType>::RunValidJsonTest(
     const std::string& test_name, ConformanceLevel level,
@@ -853,9 +841,7 @@ void BinaryAndJsonConformanceSuiteImpl<
       prototype, test_name, input_json);
   const ConformanceRequest& request = setting.GetRequest();
   ConformanceResponse response;
-  std::string effective_test_name = absl::StrCat(
-      setting.ConformanceLevelToString(level), ".",
-      setting.GetSyntaxIdentifier(), ".JsonInput.", test_name, ".Validator");
+  const std::string& effective_test_name = setting.GetTestName();
 
   if (!suite_.RunTest(effective_test_name, request, &response)) {
     return;
@@ -1003,9 +989,7 @@ void BinaryAndJsonConformanceSuiteImpl<MessageType>::
       payload_message.SerializeAsString());
   const ConformanceRequest& request = setting.GetRequest();
   ConformanceResponse response;
-  std::string effective_test_name =
-      absl::StrCat(setting.ConformanceLevelToString(level), ".",
-                   SyntaxIdentifier(), ".", test_name, ".JsonOutput");
+  const std::string& effective_test_name = setting.GetTestName();
 
   if (!suite_.RunTest(effective_test_name, request, &response)) {
     return;
@@ -1020,104 +1004,6 @@ void BinaryAndJsonConformanceSuiteImpl<MessageType>::
   } else {
     test.set_failure_message("Should have failed to serialize, but didn't.");
     suite_.ReportFailure(test, level, request, response);
-  }
-}
-
-template <typename MessageType>
-void BinaryAndJsonConformanceSuiteImpl<MessageType>::TestPrematureEOFForType(
-    FieldDescriptor::Type type) {
-  // Incomplete values for each wire type.
-  static constexpr absl::string_view incompletes[6] = {
-      "\x80",     // VARINT
-      "abcdefg",  // 64BIT
-      "\x80",     // DELIMITED (partial length)
-      "",         // START_GROUP (no value required)
-      "",         // END_GROUP (no value required)
-      "abc"       // 32BIT
-  };
-
-  const FieldDescriptor* field = GetFieldForType(type, false);
-  const FieldDescriptor* rep_field = GetFieldForType(type, true);
-  WireFormatLite::WireType wire_type = WireFormatLite::WireTypeForFieldType(
-      static_cast<WireFormatLite::FieldType>(type));
-  absl::string_view incomplete = incompletes[wire_type];
-  const std::string type_name =
-      UpperCase(absl::StrCat(".", FieldDescriptor::TypeName(type)));
-
-  ExpectParseFailureForProto(
-      tag(field->number(), wire_type),
-      absl::StrCat("PrematureEofBeforeKnownNonRepeatedValue", type_name),
-      REQUIRED);
-
-  ExpectParseFailureForProto(
-      tag(rep_field->number(), wire_type),
-      absl::StrCat("PrematureEofBeforeKnownRepeatedValue", type_name),
-      REQUIRED);
-
-  ExpectParseFailureForProto(
-      tag(UNKNOWN_FIELD, wire_type),
-      absl::StrCat("PrematureEofBeforeUnknownValue", type_name), REQUIRED);
-
-  ExpectParseFailureForProto(
-      absl::StrCat(tag(field->number(), wire_type), incomplete),
-      absl::StrCat("PrematureEofInsideKnownNonRepeatedValue", type_name),
-      REQUIRED);
-
-  ExpectParseFailureForProto(
-      absl::StrCat(tag(rep_field->number(), wire_type), incomplete),
-      absl::StrCat("PrematureEofInsideKnownRepeatedValue", type_name),
-      REQUIRED);
-
-  ExpectParseFailureForProto(
-      absl::StrCat(tag(UNKNOWN_FIELD, wire_type), incomplete),
-      absl::StrCat("PrematureEofInsideUnknownValue", type_name), REQUIRED);
-
-  if (wire_type == WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
-    ExpectParseFailureForProto(
-        absl::StrCat(tag(field->number(), wire_type), varint(1)),
-        absl::StrCat("PrematureEofInDelimitedDataForKnownNonRepeatedValue",
-                     type_name),
-        REQUIRED);
-
-    ExpectParseFailureForProto(
-        absl::StrCat(tag(rep_field->number(), wire_type), varint(1)),
-        absl::StrCat("PrematureEofInDelimitedDataForKnownRepeatedValue",
-                     type_name),
-        REQUIRED);
-
-    // EOF in the middle of delimited data for unknown value.
-    ExpectParseFailureForProto(
-        absl::StrCat(tag(UNKNOWN_FIELD, wire_type), varint(1)),
-        absl::StrCat("PrematureEofInDelimitedDataForUnknownValue", type_name),
-        REQUIRED);
-
-    if (type == FieldDescriptor::TYPE_MESSAGE) {
-      // Submessage ends in the middle of a value.
-      std::string incomplete_submsg = absl::StrCat(
-          tag(WireFormatLite::TYPE_INT32, WireFormatLite::WIRETYPE_VARINT),
-          incompletes[WireFormatLite::WIRETYPE_VARINT]);
-      ExpectHardParseFailureForProto(
-          absl::StrCat(
-              tag(field->number(), WireFormatLite::WIRETYPE_LENGTH_DELIMITED),
-              varint(incomplete_submsg.size()), incomplete_submsg),
-          absl::StrCat("PrematureEofInSubmessageValue", type_name), REQUIRED);
-    }
-  } else if (type != FieldDescriptor::TYPE_GROUP) {
-    // Non-delimited, non-group: eligible for packing.
-
-    // Packed region ends in the middle of a value.
-    ExpectHardParseFailureForProto(
-        absl::StrCat(
-            tag(rep_field->number(), WireFormatLite::WIRETYPE_LENGTH_DELIMITED),
-            varint(incomplete.size()), incomplete),
-        absl::StrCat("PrematureEofInPackedFieldValue", type_name), REQUIRED);
-
-    // EOF in the middle of packed region.
-    ExpectParseFailureForProto(
-        absl::StrCat(
-            tag(rep_field->number(), WireFormatLite::WIRETYPE_LENGTH_DELIMITED),
-            varint(1)),
-        absl::StrCat("PrematureEofInPackedField", type_name), REQUIRED);
   }
 }
 
@@ -1176,9 +1062,9 @@ void BinaryAndJsonConformanceSuiteImpl<MessageType>::TestValidDataForType(
   // Test repeated fields.
   if (FieldDescriptor::IsTypePackable(type)) {
     const FieldDescriptor* packed_field =
-        GetFieldForType(type, true, Packed::kTrue);
+        GetFieldForType(type, true, Packed::kPacked);
     const FieldDescriptor* unpacked_field =
-        GetFieldForType(type, true, Packed::kFalse);
+        GetFieldForType(type, true, Packed::kUnpacked);
 
     std::string default_proto_packed;
     std::string default_proto_unpacked;
@@ -1977,7 +1863,7 @@ void BinaryAndJsonConformanceSuiteImpl<MessageType>::
         FieldDescriptor::Type type) {
   const std::string type_name =
       UpperCase(absl::StrCat(".", FieldDescriptor::TypeName(type)));
-  int field_number = GetFieldForType(type, true, Packed::kFalse)->number();
+  int field_number = GetFieldForType(type, true, Packed::kUnpacked)->number();
   std::string rep_field_proto = absl::StrCat(
       tag(field_number, WireFormatLite::WireTypeForFieldType(
                             static_cast<WireFormatLite::FieldType>(type))),
@@ -2017,11 +1903,8 @@ BinaryAndJsonConformanceSuiteImpl<MessageType>::
 template <typename MessageType>
 void BinaryAndJsonConformanceSuiteImpl<MessageType>::RunAllTests() {
   if (!suite_.performance_) {
-    for (int i = 1; i <= FieldDescriptor::MAX_TYPE; i++) {
-      if (i == FieldDescriptor::TYPE_GROUP) continue;
-      TestPrematureEOFForType(static_cast<FieldDescriptor::Type>(i));
-    }
-
+    // Groups already migrated to gtest live in the gtest suites linked into
+    // conformance_test_runner (see BUILD) and are no longer run from here.
     TestIllegalTags();
     TestUnmatchedGroup();
     TestUnknownWireType();
@@ -2645,7 +2528,7 @@ void BinaryAndJsonConformanceSuiteImpl<
                                          value.isMember("FieldName3") &&
                                          value.isMember("fieldName4");
                                 });
-  RunValidJsonTestWithValidator("FieldNameWithNumbers", REQUIRED,
+  RunValidJsonTestWithValidator("FieldNameWithNumbersValidator", REQUIRED,
                                 R"({
         "field0name5": 5,
         "field0Name6": 6
@@ -2655,7 +2538,7 @@ void BinaryAndJsonConformanceSuiteImpl<
                                          value.isMember("field0Name6");
                                 });
   RunValidJsonTestWithValidator(
-      "FieldNameWithMixedCases", REQUIRED,
+      "FieldNameWithMixedCasesValidator", REQUIRED,
       R"({
         "fieldName7": 7,
         "FieldName8": 8,
@@ -2670,7 +2553,7 @@ void BinaryAndJsonConformanceSuiteImpl<
                value.isMember("FIELDNAME11") && value.isMember("FIELDName12");
       });
   RunValidJsonTestWithValidator(
-      "FieldNameWithDoubleUnderscores", RECOMMENDED,
+      "FieldNameWithDoubleUnderscoresValidator", RECOMMENDED,
       R"({
         "FieldName13": 13,
         "FieldName14": 14,
@@ -4219,31 +4102,8 @@ template <typename MessageType>
 const FieldDescriptor*
 BinaryAndJsonConformanceSuiteImpl<MessageType>::GetFieldForType(
     FieldDescriptor::Type type, bool repeated, Packed packed) const {
-  const Descriptor* d = MessageType::GetDescriptor();
-  for (int i = 0; i < d->field_count(); i++) {
-    const FieldDescriptor* f = d->field(i);
-    if (f->type() == type && f->is_repeated() == repeated) {
-      if ((packed == Packed::kTrue && !f->is_packed()) ||
-          (packed == Packed::kFalse && f->is_packed())) {
-        continue;
-      }
-      return f;
-    }
-  }
-
-  absl::string_view packed_string = "";
-  const absl::string_view repeated_string =
-      repeated ? "Repeated " : "Singular ";
-  if (packed == Packed::kTrue) {
-    packed_string = "Packed ";
-  }
-  if (packed == Packed::kFalse) {
-    packed_string = "Unpacked ";
-  }
-  ABSL_LOG(FATAL) << "Couldn't find field with type: " << repeated_string
-                  << packed_string << FieldDescriptor::TypeName(type) << " for "
-                  << d->full_name();
-  return nullptr;
+  return ::google::protobuf::conformance::GetFieldForType(*MessageType::GetDescriptor(),
+                                                type, repeated, packed);
 }
 
 template <typename MessageType>
