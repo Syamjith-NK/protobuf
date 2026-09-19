@@ -201,7 +201,19 @@ cc_library(
         "@abseil-cpp//absl/strings",  # fork_pipe_runner_win32.cc
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/types:optional",
         "@abseil-cpp//absl/types:span",
+    ],
+)
+
+cc_test(
+    name = "fork_pipe_runner_test",
+    srcs = ["fork_pipe_runner_test.cc"],
+    deps = [
+        ":conformance_cc_proto",
+        ":fork_pipe_runner",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
     ],
 )
 

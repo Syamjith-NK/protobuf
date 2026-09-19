@@ -57,12 +57,15 @@ std::string ForkPipeRunner::RunTest(absl::string_view test_name,
   CheckedWrite(request.data(), request.size());
 
   std::string response;
-  bool timed_out = false;
-  if (!TryRead(&len, sizeof(uint32_t), &timed_out)) {
+  const ReadResult read_result = TryRead(&len, sizeof(uint32_t));
+  if (read_result != ReadResult::kOk) {
+    // The testee produced no response: it exited, crashed, or hung.  It is
+    // shut down and the outcome classified by the platform's implementation;
+    // the next RunTest() call will spawn a fresh testee.
     conformance::ConformanceResponse response_obj;
-    std::string error_msg = GetTestProgramFailure(timed_out);
+    const std::string error_msg = GetTestProgramFailure(read_result);
     ABSL_LOG(INFO) << error_msg;
-    if (timed_out) {
+    if (read_result == ReadResult::kTimeout) {
       response_obj.set_timeout_error(error_msg);
     } else {
       response_obj.set_runtime_error(error_msg);
@@ -74,7 +77,7 @@ std::string ForkPipeRunner::RunTest(absl::string_view test_name,
 
   len = internal::little_endian::ToHost(len);
   response.resize(len);
-  CheckedRead((void*)response.c_str(), len);
+  CheckedRead(&response[0], len);
   return response;
 }
 
