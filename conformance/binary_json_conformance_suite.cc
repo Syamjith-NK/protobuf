@@ -5,7 +5,7 @@
 // license that can be found in the LICENSE file or at
 // https://developers.google.com/open-source/licenses/bsd
 
-#include "binary_json_conformance_suite.h"
+#include "conformance/binary_json_conformance_suite.h"
 
 #include <cassert>
 #include <cctype>
@@ -29,9 +29,9 @@
 #include "json/config.h"
 #include "json/reader.h"
 #include "json/value.h"
-#include "binary_wireformat.h"
+#include "conformance/binary_wireformat.h"
 #include "conformance/conformance.pb.h"
-#include "conformance_test.h"
+#include "conformance/conformance_test.h"
 #include "conformance/test_protos/test_messages_edition2023.pb.h"
 #include "conformance/test_protos/test_messages_edition_unstable.pb.h"
 #include "editions/golden/test_messages_proto2_editions.pb.h"
@@ -853,9 +853,7 @@ void BinaryAndJsonConformanceSuiteImpl<
       prototype, test_name, input_json);
   const ConformanceRequest& request = setting.GetRequest();
   ConformanceResponse response;
-  std::string effective_test_name = absl::StrCat(
-      setting.ConformanceLevelToString(level), ".",
-      setting.GetSyntaxIdentifier(), ".JsonInput.", test_name, ".Validator");
+  const std::string& effective_test_name = setting.GetTestName();
 
   if (!suite_.RunTest(effective_test_name, request, &response)) {
     return;
@@ -1003,9 +1001,7 @@ void BinaryAndJsonConformanceSuiteImpl<MessageType>::
       payload_message.SerializeAsString());
   const ConformanceRequest& request = setting.GetRequest();
   ConformanceResponse response;
-  std::string effective_test_name =
-      absl::StrCat(setting.ConformanceLevelToString(level), ".",
-                   SyntaxIdentifier(), ".", test_name, ".JsonOutput");
+  const std::string& effective_test_name = setting.GetTestName();
 
   if (!suite_.RunTest(effective_test_name, request, &response)) {
     return;
@@ -2645,7 +2641,7 @@ void BinaryAndJsonConformanceSuiteImpl<
                                          value.isMember("FieldName3") &&
                                          value.isMember("fieldName4");
                                 });
-  RunValidJsonTestWithValidator("FieldNameWithNumbers", REQUIRED,
+  RunValidJsonTestWithValidator("FieldNameWithNumbersValidator", REQUIRED,
                                 R"({
         "field0name5": 5,
         "field0Name6": 6
@@ -2655,7 +2651,7 @@ void BinaryAndJsonConformanceSuiteImpl<
                                          value.isMember("field0Name6");
                                 });
   RunValidJsonTestWithValidator(
-      "FieldNameWithMixedCases", REQUIRED,
+      "FieldNameWithMixedCasesValidator", REQUIRED,
       R"({
         "fieldName7": 7,
         "FieldName8": 8,
@@ -2670,7 +2666,7 @@ void BinaryAndJsonConformanceSuiteImpl<
                value.isMember("FIELDNAME11") && value.isMember("FIELDName12");
       });
   RunValidJsonTestWithValidator(
-      "FieldNameWithDoubleUnderscores", RECOMMENDED,
+      "FieldNameWithDoubleUnderscoresValidator", RECOMMENDED,
       R"({
         "FieldName13": 13,
         "FieldName14": 14,
