@@ -43,6 +43,7 @@ absl::flat_hash_map<absl::string_view, std::string> EnumVars(
     const EnumDescriptor* enum_, const Options& options,
     const EnumValueDescriptor* min, const EnumValueDescriptor* max) {
   auto classname = ClassName(enum_, false);
+  const bool is_deprecated = enum_->options().deprecated();
   return {
       {"Enum", std::string(enum_->name())},
       {"Enum_", ResolveKnownNameCollisions(enum_->name(),
@@ -63,6 +64,10 @@ absl::flat_hash_map<absl::string_view, std::string> EnumVars(
                           : "const ::std::string&"},
       // TODO: Enable this everywhere.
       {"nodiscard", options.opensource_runtime ? "[[nodiscard]]" : ""},
+      {"IGNORE_DEPRECATION_START",
+       is_deprecated ? "PROTOBUF_IGNORE_DEPRECATION_START\n" : ""},
+      {"IGNORE_DEPRECATION_STOP",
+       is_deprecated ? "PROTOBUF_IGNORE_DEPRECATION_STOP\n" : ""},
   };
 }
 
@@ -183,6 +188,7 @@ void EnumGenerator::GenerateDefinition(io::Printer* p) {
           $open_enum_sentinels$,
         };
 
+        $IGNORE_DEPRECATION_START$
         $dllexport_decl $extern const uint32_t $Msg_Enum$_internal_data_[];
         inline constexpr $Msg_Enum$ $Msg_Enum_Enum_MIN$ =
             static_cast<$Msg_Enum$>($kMin$);
@@ -281,11 +287,13 @@ void EnumGenerator::GenerateDefinition(io::Printer* p) {
           ::absl::string_view name, $Msg_Enum$* $nonnull$ value);
     )cc");
   }
+  p->Emit(R"cc($IGNORE_DEPRECATION_STOP$)cc");
 }
 
 void EnumGenerator::GenerateGetEnumDescriptorSpecializations(io::Printer* p) {
   auto v = p->WithVars(EnumVars(enum_, options_, limits_.min, limits_.max));
 
+  p->Emit(R"cc($IGNORE_DEPRECATION_START$)cc");
   p->Emit(R"cc(
     template <>
     struct is_proto_enum<$::Msg_Enum$> : std::true_type {};
@@ -307,11 +315,13 @@ void EnumGenerator::GenerateGetEnumDescriptorSpecializations(io::Printer* p) {
       };
     )cc");
   }
+  p->Emit(R"cc($IGNORE_DEPRECATION_STOP$)cc");
 }
 
 
 void EnumGenerator::GenerateSymbolImports(io::Printer* p) const {
   auto v = p->WithVars(EnumVars(enum_, options_, limits_.min, limits_.max));
+  p->Emit(R"cc($IGNORE_DEPRECATION_START$)cc");
 
   p->Emit({Sub("Enum_", p->LookupVar("Enum_")).AnnotatedAs(enum_)}, R"cc(
     using $Enum_$ = $Msg_Enum$;
@@ -384,6 +394,7 @@ void EnumGenerator::GenerateSymbolImports(io::Printer* p) const {
       return $Msg_Enum$_Parse(name, value);
     }
   )cc");
+  p->Emit(R"cc($IGNORE_DEPRECATION_STOP$)cc");
 }
 
 void EnumGenerator::GenerateIsValid(io::Printer* p) const {
@@ -430,6 +441,7 @@ void EnumGenerator::GenerateIsValid(io::Printer* p) const {
 
 void EnumGenerator::GenerateMethods(int idx, io::Printer* p) {
   auto v = p->WithVars(EnumVars(enum_, options_, limits_.min, limits_.max));
+  p->Emit(R"cc($IGNORE_DEPRECATION_START$)cc");
 
   if (has_reflection_) {
     p->Emit({{"idx", idx}}, R"cc(
@@ -610,6 +622,7 @@ void EnumGenerator::GenerateMethods(int idx, io::Printer* p) {
       )cc");
     }
   }
+  p->Emit(R"cc($IGNORE_DEPRECATION_STOP$)cc");
 }
 }  // namespace cpp
 }  // namespace compiler
