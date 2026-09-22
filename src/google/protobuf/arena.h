@@ -731,15 +731,13 @@ class PROTOBUF_EXPORT PROTOBUF_ALIGNAS(8)
     }
   }
 
-  template <typename T, bool trivial = std::is_trivially_destructible_v<T>>
+  template <typename T>
   PROTOBUF_NDEBUG_INLINE void* PROTOBUF_NONNULL AllocateInternal() {
-    if (trivial) {
+    if constexpr (std::is_trivially_destructible_v<T>) {
       return AllocateAligned(sizeof(T), alignof(T));
     } else {
-      // We avoid instantiating arena_destruct_object<T> in the trivial case.
-      constexpr auto dtor = &internal::cleanup::arena_destruct_object<
-          std::conditional_t<trivial, std::string, T>>;
-      return AllocateAlignedWithCleanup(sizeof(T), alignof(T), dtor);
+      return AllocateAlignedWithCleanup(
+          sizeof(T), alignof(T), &internal::cleanup::arena_destruct_object<T>);
     }
   }
 
@@ -1190,7 +1188,7 @@ PROTOBUF_NOINLINE void* PROTOBUF_NONNULL Arena::CopyConstruct(
 }
 
 template <>
-inline void* PROTOBUF_NONNULL Arena::AllocateInternal<std::string, false>() {
+inline void* PROTOBUF_NONNULL Arena::AllocateInternal<std::string>() {
   return impl_.AllocateFromStringBlock();
 }
 
